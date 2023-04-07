@@ -44,11 +44,3 @@ object initObject(float x, float y, float width, float height, bool hasGravity){
 	obj.gravitySpeed = 0;
 	return obj;
 }
-
-SDL_Texture* loadBMPText(char path[],SDL_Renderer* thisRenderer){
-	SDL_Surface* thisSurface = SDL_LoadBMP(path);
-	SDL_Texture* thisTexture;
-    thisTexture = SDL_CreateTextureFromSurface(thisRenderer, thisSurface);
-    SDL_FreeSurface(thisSurface);
-    return thisTexture;
-}

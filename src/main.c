@@ -1,5 +1,6 @@
 #include "./constants.h"
 #include "./object.h"
+#include "./image.h"
 #include "port.h"
 
 //"UNIX" = 1, "PS2" = 2 // every time it tries to see from what it's going to port
@@ -27,7 +28,12 @@ Room = 1;
 ///////////////////////////////////////////////////////////////////////////////
 
 object player;
+
 object roof1;
+object key1;
+object door1;
+object sqr1;
+bool dooropen1 = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Function to fix the improper TEXA value set by gsKit internally //by: F0bes//
@@ -140,14 +146,20 @@ void process_input(void) {
 ///////////////////////////////////////////////////////////////////////////////
 void Nsetup(void) {
     player = initObject(200,200,48,48,false);
-    roof1  = initObject(0,100,640,50,false);
+    sqr1   = initObject(540,160,40,40,false);
+    door1  = initObject(520,204,80,80,false);
+    roof1  = initObject(0 ,100,640,50,false);
+    key1   = initObject(350,240,20,40,false);
     //the object type needs some variables that can be put here to stay more simple
     player.speedX = 200;
     //speedX it's in object type but will be removed soon
     
     player.text  = loadBMPText("Assets/player.bmp",renderer);
-    //roof1.text = loadBMPText("Assets/grid.bmp",  renderer);
+    key1.text    = loadBMPText("Assets/key.bmp"   ,renderer);
+    door1.text   = loadBMPText("Assets/door.bmp"  ,renderer);
     Tsala1       = loadBMPText("Assets/room1.bmp" ,renderer);
+
+    sqr1    = setAnimation(sqr1,3,renderer,(char*[]){"Assets/sqrbtn0.bmp","Assets/sqrbtn1.bmp","Assets/sqrbtn2.bmp"});
     //I also made a texture-from-path
 
 }
@@ -162,8 +174,17 @@ void update(void) {
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0;
     last_frame_time = SDL_GetTicks();
     //it waits a little if is needed to
-    if(Room == 1)
+    if(Room == 1){
         rockbottom = WINDOW_HEIGHT - player.height - 164;
+        if(hasCollision(player,key1)){
+            dooropen1 = true;
+            SDL_DestroyTexture(key1.text);
+            key1.y = 999;
+            SDL_DestroyTexture(door1.text);
+            door1.text = loadBMPText("Assets/dooro.bmp"  ,renderer);
+        }
+    }
+
     if (player.y > rockbottom || hasCollision(player,roof1)) {
         if (player.y > rockbottom)
         player.y = rockbottom;
@@ -174,6 +195,7 @@ void update(void) {
 
     player = backInCollision(player,roof1);
     //checks if it's colliding and block it (on the more above code)
+
 
     /////////////////////////////////////////////////////////////////////////////////
     if (player.onfloor)
@@ -187,20 +209,30 @@ void update(void) {
 ///////////////////////////////////////////////////////////////////////////////
 // Render function to draw game objects in the SDL window
 ///////////////////////////////////////////////////////////////////////////////
+int u=30;
 void render(void) {
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    SDL_Rect Rsala1 = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
-    SDL_RenderCopy(renderer, Tsala1, NULL, &Rsala1);
-
-    SDL_Rect Rplayer = {player.x,player.y, player.width, player.height};
-    SDL_RenderCopy(renderer, player.text, NULL, &Rplayer);
-
     if(Room == 1){
-        SDL_Rect Rroof1 = {roof1.x,roof1.y, roof1.width, roof1.height};
-        SDL_RenderCopy(renderer, roof1.text, NULL, &Rroof1);
+        SDL_Rect Rsala1 = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
+        SDL_RenderCopy(renderer, Tsala1, NULL, &Rsala1);
+
+        blitObject(roof1,renderer);
+        blitObject(key1,renderer);
+        blitObject(door1,renderer);
+
+        if(dooropen1 && hasCollision(player,door1)){
+            sqr1.text = sqr1.anim[0];
+            blitAnimateObject(sqr1,renderer,u);
+            u++;
+            if (u > 120)
+                u = 30;
+        }
     }
+
+    blitObject(player,renderer);
+
 
     SDL_RenderPresent(renderer);
     //it renders some images and present it
@@ -209,10 +241,14 @@ void render(void) {
 ///////////////////////////////////////////////////////////////////////////////
 // Function to destroy SDL window and renderer
 ///////////////////////////////////////////////////////////////////////////////
-void destroy_window(void) {
+void destroy_window(void) {    
     SDL_DestroyTexture(player.text);
+
     SDL_DestroyTexture(roof1.text);
+    SDL_DestroyTexture(key1.text);
+    SDL_DestroyTexture(door1.text);
     SDL_DestroyTexture(Tsala1);
+
     SDL_JoystickClose(joystick);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

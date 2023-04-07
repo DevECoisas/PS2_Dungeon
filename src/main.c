@@ -19,18 +19,19 @@ float delta_time;
 
 SDL_Texture* Tsala1 = NULL;
 
+float rockbottom; 
+Room = 1;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Declare the objects (a type that I made to keep things simple)
 ///////////////////////////////////////////////////////////////////////////////
 
 object player;
-object gridbox;
-object gridbox2;
+object roof1;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Function to fix the improper TEXA value set by gsKit internally //by: F0bes//
 ////////////////////////////////////////////////////////////////////////////////
-
 #ifdef PORTING_TO
     #if PORTING_TO == 2
         #include <tamtypes.h>
@@ -138,17 +139,15 @@ void process_input(void) {
 // Setup function that runs once at the beginning of the program
 ///////////////////////////////////////////////////////////////////////////////
 void Nsetup(void) {
-    player = initObject(200,40,48,48,false);
-    gridbox = initObject(300,WINDOW_HEIGHT-50,200,50,false);
-    gridbox2 = initObject(120,WINDOW_HEIGHT-100,200,50,false);
+    player = initObject(200,200,48,48,false);
+    roof1  = initObject(0,100,640,50,false);
     //the object type needs some variables that can be put here to stay more simple
     player.speedX = 200;
     //speedX it's in object type but will be removed soon
     
     player.text  = loadBMPText("Assets/player.bmp",renderer);
-    gridbox.text = loadBMPText("Assets/grid.bmp"  ,renderer);
-    gridbox2.text = loadBMPText("Assets/grid.bmp"  ,renderer);
-    Tsala1       = loadBMPText("Assets/sala1.bmp" ,renderer);
+    //roof1.text = loadBMPText("Assets/grid.bmp",  renderer);
+    Tsala1       = loadBMPText("Assets/room1.bmp" ,renderer);
     //I also made a texture-from-path
 
 }
@@ -163,9 +162,9 @@ void update(void) {
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0;
     last_frame_time = SDL_GetTicks();
     //it waits a little if is needed to
-
-    float rockbottom = WINDOW_HEIGHT - player.height;
-    if (player.y > rockbottom || hasCollision(player,gridbox) || hasCollision(player,gridbox2)) {
+    if(Room == 1)
+        rockbottom = WINDOW_HEIGHT - player.height - 164;
+    if (player.y > rockbottom || hasCollision(player,roof1)) {
         if (player.y > rockbottom)
         player.y = rockbottom;
         player.onfloor = true;
@@ -173,8 +172,7 @@ void update(void) {
         player.onfloor = false;
     }
 
-    player = backInCollision(player,gridbox);
-    player = backInCollision(player,gridbox2);
+    player = backInCollision(player,roof1);
     //checks if it's colliding and block it (on the more above code)
 
     /////////////////////////////////////////////////////////////////////////////////
@@ -199,11 +197,10 @@ void render(void) {
     SDL_Rect Rplayer = {player.x,player.y, player.width, player.height};
     SDL_RenderCopy(renderer, player.text, NULL, &Rplayer);
 
-    SDL_Rect Rbox = {gridbox.x,gridbox.y, gridbox.width, gridbox.height};
-    SDL_RenderCopy(renderer, gridbox.text, NULL, &Rbox);
-
-    SDL_Rect Rbox2 = {gridbox2.x,gridbox2.y, gridbox2.width, gridbox2.height};
-    SDL_RenderCopy(renderer, gridbox2.text, NULL, &Rbox2);
+    if(Room == 1){
+        SDL_Rect Rroof1 = {roof1.x,roof1.y, roof1.width, roof1.height};
+        SDL_RenderCopy(renderer, roof1.text, NULL, &Rroof1);
+    }
 
     SDL_RenderPresent(renderer);
     //it renders some images and present it
@@ -214,7 +211,7 @@ void render(void) {
 ///////////////////////////////////////////////////////////////////////////////
 void destroy_window(void) {
     SDL_DestroyTexture(player.text);
-    SDL_DestroyTexture(gridbox.text);
+    SDL_DestroyTexture(roof1.text);
     SDL_DestroyTexture(Tsala1);
     SDL_JoystickClose(joystick);
     SDL_DestroyRenderer(renderer);

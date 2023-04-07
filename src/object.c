@@ -17,6 +17,7 @@ object backInCollision(object a,object b){
 		}
 		if(a.y < b.y + b.height && a.y > b.y + (b.height/4)*3){
 			a.y = b.y + b.height;
+			a.onfloor = false;
 		}
 		if(a.x < b.x + b.width && a.x > b.x + (b.width/8)*7){
 			a.x = b.x + b.width;

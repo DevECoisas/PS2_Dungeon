@@ -1,5 +1,5 @@
 build:
-	gcc -Wall -std=c99 ./src/*.c -lSDL2 -DPS2 -DHAVE_SDL2 -o game
+	gcc -Wall -std=c99 -I./src/Ports/UNIX ./src/*.c -lSDL2 -DPS2 -DHAVE_SDL2 -o game
 
 run:
 	./game

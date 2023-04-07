@@ -1,9 +1,10 @@
-#include <stdio.h>
-#include <stdbool.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_gamecontroller.h>
 #include "./constants.h"
-#define SDL_MAIN_HANDLED
+#include "./object.h"
+#include "port.h"
+
+//"UNIX" = 1, "PS2" = 2 // every time it tries to see from what it's going to port
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Global variables
 ///////////////////////////////////////////////////////////////////////////////
@@ -13,29 +14,51 @@ SDL_Renderer* renderer = NULL;
 int last_frame_time = 0;
 
 SDL_GameController* controller;
+SDL_Joystick* joystick;
 float delta_time;
-///////////////////////////////////////////////////////////////////////////////
 
-SDL_Surface* Splayer = NULL;
-SDL_Texture* Tplayer = NULL;
-
-SDL_Surface* Ssala1 = NULL;
 SDL_Texture* Tsala1 = NULL;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Declare two game objects for the ball and the paddle
+// Declare the objects (a type that I made to keep things simple)
 ///////////////////////////////////////////////////////////////////////////////
-struct game_object {
-    float x;
-    float y;
-    float width;
-    float height;
-    float vel_x;
-    float vel_y;
-} ball, paddle;
+
+object player;
+object gridbox;
+object gridbox2;
+
+////////////////////////////////////////////////////////////////////////////////
+// Function to fix the improper TEXA value set by gsKit internally //by: F0bes//
+////////////////////////////////////////////////////////////////////////////////
+
+#ifdef PORTING_TO
+    #if PORTING_TO == 2
+        #include <tamtypes.h>
+        void fix_texa_value(void)
+        {
+    qword_t draw_packet[2] __aligned(16);
+    qword_t* q = draw_packet;
+
+    q->dw[0] = 0x1000000000008001u; // GIF_TAG
+    q->dw[1] = 0x0E; // Write to AD register
+    q++;
+    // TEXA
+    q->dw[0] = (u64)0x80 << 32; // TA1 = 0x80 AEM = 0 TA0 = 0 
+    q->dw[1] = 0x3B; // TEXA register
+    q++;
+
+    *((vu32*)0x1000a010) = (u32)&draw_packet[0]; // Point the channel to our data
+    *((vu32*)0x1000a020) = 2; // # of qwords (2)
+
+    *((vu32*)0x1000a000) = 0x100; // Run the DMA channel
+
+    while(*((vu32*)0x1000a000) & 0x100); // Wait for DMA transfer
+    }
+    #endif
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// Function to initialize our SDL window
+// Function to initialize the SDL window
 ///////////////////////////////////////////////////////////////////////////////
 int initialize_window(void) {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
@@ -62,15 +85,21 @@ int initialize_window(void) {
     controller = SDL_GameControllerOpen(0);
     if(controller == NULL){ 
         printf("Failed to open the game controller!\n");
-        return false;
     }else 
         printf("Controller OK!\n");
+
+    joystick = SDL_JoystickOpen(0);
+    if (joystick == NULL) {
+        printf("Failed to open joystick\n");
+    }else {
+        printf("Joystick opened successfully\n");
+    }        
     return true;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Function to poll SDL events and process keyboard input
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////
+// Function to read the events that are happening and interprets it in diferent ways
+/////////////////////////////////////////////////////////////////////////////////////
 void process_input(void) {
     SDL_Event event;
     SDL_PollEvent(&event);
@@ -78,108 +107,83 @@ void process_input(void) {
         case SDL_QUIT:
             game_is_running = false;
             break;
-        case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_ESCAPE)
-                game_is_running = false;
-            if (event.key.keysym.sym == SDLK_LEFT)
-                paddle.vel_x = -400;
-            if (event.key.keysym.sym == SDLK_RIGHT)
-                paddle.vel_x = +400;
-            break;
-        case SDL_KEYUP:
-            if (event.key.keysym.sym == SDLK_LEFT)
-                paddle.vel_x = 0;
-            if (event.key.keysym.sym == SDLK_RIGHT)
-                paddle.vel_x = 0;
-            break;
     }
 
-    const SDL_GameControllerButton UpState = SDL_GameControllerGetButton(controller,11);
-    const SDL_GameControllerButton DownState = SDL_GameControllerGetButton(controller,12);
+    //const SDL_GameControllerButton UpState = SDL_GameControllerGetButton(controller,11);
+    //const SDL_GameControllerButton DownState = SDL_GameControllerGetButton(controller,12);
     const SDL_GameControllerButton LeftState = SDL_GameControllerGetButton(controller,13);
-    const SDL_GameControllerButton RightState = SDL_GameControllerGetButton(controller,14); 
+    const SDL_GameControllerButton RightState = SDL_GameControllerGetButton(controller,14);
+
+    const SDL_GameControllerButton AState = SDL_GameControllerGetButton(controller,0); 
+
+    const float JoyLeftXState = SDL_JoystickGetAxis(joystick,0);
+
+    int x_axis = SDL_JoystickGetAxis(joystick, 0);
+    int y_axis = SDL_JoystickGetAxis(joystick, 1);
+    player.x += player.speedX * delta_time * (x_axis / 32767);
 
     if(RightState == SDL_PRESSED)
-        paddle.x += 400 * delta_time;
+        player.x += player.speedX * delta_time;
     if(LeftState == SDL_PRESSED)
-        paddle.x -= 400 * delta_time;
-    if(UpState == SDL_PRESSED)
-        paddle.y -= 400 * delta_time;
-    if(DownState == SDL_PRESSED)
-        paddle.y += 400 * delta_time;
+        player.x -= player.speedX * delta_time;
+    if(AState == SDL_PRESSED && player.onfloor){
+        player.gravity = -3;
+    }else if(!player.onfloor){
+        player.gravity = 0.2;
+    }
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Setup function that runs once at the beginning of our program
+// Setup function that runs once at the beginning of the program
 ///////////////////////////////////////////////////////////////////////////////
 void Nsetup(void) {
-    // Initialize values for the the ball object
-    ball.width = 15;
-    ball.height = 15;
-    ball.x = 20;
-    ball.y = 20;
-    ball.vel_x = 300;
-    ball.vel_y = 300;
+    player = initObject(200,40,48,48,false);
+    gridbox = initObject(300,WINDOW_HEIGHT-50,200,50,false);
+    gridbox2 = initObject(120,WINDOW_HEIGHT-100,200,50,false);
+    //the object type needs some variables that can be put here to stay more simple
+    player.speedX = 200;
+    //speedX it's in object type but will be removed soon
+    
+    player.text  = loadBMPText("Assets/player.bmp",renderer);
+    gridbox.text = loadBMPText("Assets/grid.bmp"  ,renderer);
+    gridbox2.text = loadBMPText("Assets/grid.bmp"  ,renderer);
+    Tsala1       = loadBMPText("Assets/sala1.bmp" ,renderer);
+    //I also made a texture-from-path
 
-    // Initialize the values for the paddle object
-    paddle.width = 100;
-    paddle.height = 20;
-    paddle.x = (WINDOW_WIDTH / 2) - (paddle.width / 2);
-    paddle.y = WINDOW_HEIGHT - 40;
-
-    Splayer = SDL_LoadBMP("Assets/player.bmp");
-    Tplayer = SDL_CreateTextureFromSurface(renderer, Splayer);
-    SDL_FreeSurface(Splayer);
-    //SDL_SetTextureBlendMode(Tplayer, SDL_BLENDMODE_BLEND);
-    //SDL_SetTextureAlphaMod(Tplayer,100);
-
-    Ssala1 = SDL_LoadBMP("Assets/sala1.bmp");
-    Tsala1 = SDL_CreateTextureFromSurface(renderer, Ssala1);
-    SDL_FreeSurface(Ssala1);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Update function with a fixed time step
+// Update function with a fixed time step 
 ///////////////////////////////////////////////////////////////////////////////
 void update(void) {
-    // Calculate how much we have to wait until we reach the target frame time
     int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
-
-    // Only delay if we are too fast too update this frame
     if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
         SDL_Delay(time_to_wait);
-
-    // Get a delta time factor converted to seconds to be used to update my objects
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0;
-
-    // Store the milliseconds of the current frame
     last_frame_time = SDL_GetTicks();
+    //it waits a little if is needed to
 
-    // update ball and paddle position
-    ball.x += ball.vel_x * delta_time;
-    ball.y += ball.vel_y * delta_time;
-
-    // Check for ball collision with the walls
-    if (ball.x <= 0 || ball.x + ball.width >= WINDOW_WIDTH)
-        ball.vel_x = -ball.vel_x;
-    if (ball.y < 0)
-        ball.vel_y = -ball.vel_y;
-
-    // Check for ball collision with the paddle
-    if (ball.y + ball.height >= paddle.y && ball.x + ball.width >= paddle.x && ball.x <= paddle.x + paddle.width)
-        ball.vel_y = -ball.vel_y;
-
-    // Prevent paddle from moving outside the boundaries of the window
-    if (paddle.x <= 0)
-        paddle.x = 0;
-    if (paddle.x >= WINDOW_WIDTH - paddle.width)
-        paddle.x = WINDOW_WIDTH - paddle.width;
-
-    // Check for game over
-    if (ball.y + ball.height > WINDOW_HEIGHT) {
-        ball.x = WINDOW_WIDTH / 2;
-        ball.y = 0;
+    float rockbottom = WINDOW_HEIGHT - player.height;
+    if (player.y > rockbottom || hasCollision(player,gridbox) || hasCollision(player,gridbox2)) {
+        if (player.y > rockbottom)
+        player.y = rockbottom;
+        player.onfloor = true;
+    } else {
+        player.onfloor = false;
     }
+
+    player = backInCollision(player,gridbox);
+    player = backInCollision(player,gridbox2);
+    //checks if it's colliding and block it (on the more above code)
+
+    /////////////////////////////////////////////////////////////////////////////////
+    if (player.onfloor)
+        player.gravitySpeed = 0;
+
+    player.gravitySpeed += player.gravity;
+    player.y += player.gravitySpeed;
+    //some gravity to the player
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -192,38 +196,56 @@ void render(void) {
     SDL_Rect Rsala1 = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
     SDL_RenderCopy(renderer, Tsala1, NULL, &Rsala1);
 
-    SDL_Rect Rplayer = {paddle.x,paddle.y, 64, 64};
-    SDL_RenderCopy(renderer, Tplayer, NULL, &Rplayer);
+    SDL_Rect Rplayer = {player.x,player.y, player.width, player.height};
+    SDL_RenderCopy(renderer, player.text, NULL, &Rplayer);
+
+    SDL_Rect Rbox = {gridbox.x,gridbox.y, gridbox.width, gridbox.height};
+    SDL_RenderCopy(renderer, gridbox.text, NULL, &Rbox);
+
+    SDL_Rect Rbox2 = {gridbox2.x,gridbox2.y, gridbox2.width, gridbox2.height};
+    SDL_RenderCopy(renderer, gridbox2.text, NULL, &Rbox2);
 
     SDL_RenderPresent(renderer);
+    //it renders some images and present it
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Function to destroy SDL window and renderer
 ///////////////////////////////////////////////////////////////////////////////
 void destroy_window(void) {
-    SDL_DestroyTexture(Tplayer);
+    SDL_DestroyTexture(player.text);
+    SDL_DestroyTexture(gridbox.text);
     SDL_DestroyTexture(Tsala1);
+    SDL_JoystickClose(joystick);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    //Destroy some things that was imported
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Main function
 ///////////////////////////////////////////////////////////////////////////////
 int main(int argc, char* args[]) {
-    game_is_running = initialize_window();
+    game_is_running = initialize_window();// init window and some other important things
 
-    Nsetup();
+    Nsetup();// set up some things (is Nsetup and not Setup because it's causing conflict with another function)
+
+    #ifdef PORTING_TO
+    #if PORTING_TO == 2
+        fix_texa_value();
+    #endif
+    #endif
+    //again, only if is been ported to ps2 that this will work
 
     while (game_is_running) {
-        process_input();
-        update();
-        render();
+        process_input();// process the input values
+        update(); // update some things (and slow down the code if it's too fast)
+        render(); // render images
     }
 
-    destroy_window();
+    destroy_window(); // destroy some variables
 
-    return 0;
+    return 0;// end
 }
+//

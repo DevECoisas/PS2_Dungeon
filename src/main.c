@@ -18,8 +18,6 @@ SDL_GameController* controller;
 SDL_Joystick* joystick;
 float delta_time;
 
-SDL_Texture* Tsala1 = NULL;
-
 float rockbottom; 
 Room = 1;
 
@@ -28,12 +26,14 @@ Room = 1;
 ///////////////////////////////////////////////////////////////////////////////
 
 object player;
+SDL_Texture* Background = NULL;
 
 object roof1;
 object key1;
 object door1;
 object sqr1;
 bool dooropen1 = false;
+int time1=30;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Function to fix the improper TEXA value set by gsKit internally //by: F0bes//
@@ -121,7 +121,9 @@ void process_input(void) {
     const SDL_GameControllerButton LeftState = SDL_GameControllerGetButton(controller,13);
     const SDL_GameControllerButton RightState = SDL_GameControllerGetButton(controller,14);
 
-    const SDL_GameControllerButton AState = SDL_GameControllerGetButton(controller,0); 
+    const SDL_GameControllerButton XState = SDL_GameControllerGetButton(controller,0); 
+    const SDL_GameControllerButton OState = SDL_GameControllerGetButton(controller,1); 
+    const SDL_GameControllerButton SQRState = SDL_GameControllerGetButton(controller,2);
 
     const float JoyLeftXState = SDL_JoystickGetAxis(joystick,0);
 
@@ -133,12 +135,33 @@ void process_input(void) {
         player.x += player.speedX * delta_time;
     if(LeftState == SDL_PRESSED)
         player.x -= player.speedX * delta_time;
-    if(AState == SDL_PRESSED && player.onfloor){
+    if(XState == SDL_PRESSED && player.onfloor){
         player.gravity = -3;
     }else if(!player.onfloor){
         player.gravity = 0.2;
     }
 
+    if (OState == SDL_PRESSED)
+    {
+        printf("%f ... %f \n",player.x,player.y);
+    }
+
+    if (Room == 1)
+        if(dooropen1 && hasCollision(player,door1) && SQRState == SDL_PRESSED){
+            SDL_DestroyTexture(door1.text);
+            door1.y = 999;
+            SDL_DestroyTexture(key1.text);
+            Background = loadBMPText("Assets/Room2.bmp",renderer);
+            if (Background == NULL)
+                printf("eugh.");
+            SDL_DestroyTexture(sqr1.anim[0]);
+            SDL_DestroyTexture(sqr1.anim[1]);
+            SDL_DestroyTexture(sqr1.anim[2]);
+            printf("ROOM 2\n");
+            Room = 2;
+            player.x = 45;
+            player.y = 236;
+        } 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -157,7 +180,7 @@ void Nsetup(void) {
     player.text  = loadBMPText("Assets/player.bmp",renderer);
     key1.text    = loadBMPText("Assets/key.bmp"   ,renderer);
     door1.text   = loadBMPText("Assets/door.bmp"  ,renderer);
-    Tsala1       = loadBMPText("Assets/room1.bmp" ,renderer);
+    Background       = loadBMPText("Assets/room1.bmp" ,renderer);
 
     sqr1    = setAnimation(sqr1,3,renderer,(char*[]){"Assets/sqrbtn0.bmp","Assets/sqrbtn1.bmp","Assets/sqrbtn2.bmp"});
     //I also made a texture-from-path
@@ -173,7 +196,8 @@ void update(void) {
         SDL_Delay(time_to_wait);
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0;
     last_frame_time = SDL_GetTicks();
-    //it waits a little if is needed to
+    //it waits a little if it needs to
+
     if(Room == 1){
         rockbottom = WINDOW_HEIGHT - player.height - 164;
         if(hasCollision(player,key1)){
@@ -183,14 +207,38 @@ void update(void) {
             SDL_DestroyTexture(door1.text);
             door1.text = loadBMPText("Assets/dooro.bmp"  ,renderer);
         }
+    
+        if (player.y > rockbottom || hasCollision(player,roof1)) {
+            if (player.y > rockbottom)
+            player.y = rockbottom;
+            player.onfloor = true;
+        } else {
+            player.onfloor = false;
+        }
     }
 
-    if (player.y > rockbottom || hasCollision(player,roof1)) {
-        if (player.y > rockbottom)
-        player.y = rockbottom;
-        player.onfloor = true;
-    } else {
-        player.onfloor = false;
+    if(Room == 2){
+        rockbottom = WINDOW_HEIGHT - player.height - 164;
+        if(hasCollision(player,key1)){
+            dooropen1 = true;
+            SDL_DestroyTexture(key1.text);
+            key1.y = 999;
+            SDL_DestroyTexture(door1.text);
+            door1.text = loadBMPText("Assets/dooro.bmp"  ,renderer);
+        }
+    
+        if (player.y > rockbottom || hasCollision(player,roof1)) {
+            if (player.y > rockbottom)
+            player.y = rockbottom;
+            player.onfloor = true;
+        } else {
+            player.onfloor = false;
+        }
+
+        if(dooropen1 && hasCollision(player,door1)){
+            SDL_DestroyTexture(door1.text);
+            SDL_DestroyTexture(key1.text);
+        }
     }
 
     player = backInCollision(player,roof1);
@@ -209,14 +257,14 @@ void update(void) {
 ///////////////////////////////////////////////////////////////////////////////
 // Render function to draw game objects in the SDL window
 ///////////////////////////////////////////////////////////////////////////////
-int u=30;
 void render(void) {
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
     SDL_RenderClear(renderer);
 
+    SDL_Rect RBack = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
+        SDL_RenderCopy(renderer, Background, NULL, &RBack);
+
     if(Room == 1){
-        SDL_Rect Rsala1 = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
-        SDL_RenderCopy(renderer, Tsala1, NULL, &Rsala1);
 
         blitObject(roof1,renderer);
         blitObject(key1,renderer);
@@ -224,10 +272,10 @@ void render(void) {
 
         if(dooropen1 && hasCollision(player,door1)){
             sqr1.text = sqr1.anim[0];
-            blitAnimateObject(sqr1,renderer,u);
-            u++;
-            if (u > 120)
-                u = 30;
+            blitAnimateObject(sqr1,renderer,time1);
+            time1++;
+            if (time1 > 120)
+                time1 = 30;
         }
     }
 
@@ -247,7 +295,7 @@ void destroy_window(void) {
     SDL_DestroyTexture(roof1.text);
     SDL_DestroyTexture(key1.text);
     SDL_DestroyTexture(door1.text);
-    SDL_DestroyTexture(Tsala1);
+    SDL_DestroyTexture(Background);
 
     SDL_JoystickClose(joystick);
     SDL_DestroyRenderer(renderer);

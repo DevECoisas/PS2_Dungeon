@@ -1,6 +1,7 @@
 #include "./constants.h"
 #include "./object.h"
 #include "./image.h"
+#include <unistd.h>
 #include "port.h"
 
 //"UNIX" = 1, "PS2" = 2 // every time it tries to see from what it's going to port
@@ -34,6 +35,9 @@ object door1;
 object sqr1;
 bool dooropen1 = false;
 int time1=30;
+
+object wall1;
+object wall2;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Function to fix the improper TEXA value set by gsKit internally //by: F0bes//
@@ -131,10 +135,14 @@ void process_input(void) {
     int y_axis = SDL_JoystickGetAxis(joystick, 1);
     player.x += player.speedX * delta_time * (x_axis / 32767);
 
-    if(RightState == SDL_PRESSED)
+    if(RightState == SDL_PRESSED){
         player.x += player.speedX * delta_time;
-    if(LeftState == SDL_PRESSED)
+    }
+
+    if(LeftState == SDL_PRESSED){
         player.x -= player.speedX * delta_time;
+    }
+
     if(XState == SDL_PRESSED && player.onfloor){
         player.gravity = -3;
     }else if(!player.onfloor){
@@ -148,20 +156,37 @@ void process_input(void) {
 
     if (Room == 1)
         if(dooropen1 && hasCollision(player,door1) && SQRState == SDL_PRESSED){
-            SDL_DestroyTexture(door1.text);
-            door1.y = 999;
-            SDL_DestroyTexture(key1.text);
             Background = loadBMPText("Assets/Room2.bmp",renderer);
-            if (Background == NULL)
-                printf("eugh.");
-            SDL_DestroyTexture(sqr1.anim[0]);
-            SDL_DestroyTexture(sqr1.anim[1]);
-            SDL_DestroyTexture(sqr1.anim[2]);
+
+            door1.text = loadBMPText("Assets/door.bmp"  ,renderer);
+            dooropen1 = false;
             printf("ROOM 2\n");
             Room = 2;
+
             player.x = 45;
             player.y = 236;
+
+            key1.x = 371;
+            key1.y = 212;
+
         } 
+
+    if (Room == 2)
+        if(dooropen1 && hasCollision(player,door1) && SQRState == SDL_PRESSED){
+            Background = loadBMPText("Assets/Room3.bmp",renderer);
+
+            door1.text = loadBMPText("Assets/door.bmp"  ,renderer);
+            dooropen1 = false;
+            printf("ROOM 3\n");
+            Room = 3;
+
+            player.x = 45;
+            player.y = 236;
+
+            key1.x = 371;
+            key1.y = 212;
+
+        }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -173,6 +198,9 @@ void Nsetup(void) {
     door1  = initObject(520,204,80,80,false);
     roof1  = initObject(0 ,100,640,50,false);
     key1   = initObject(350,240,20,40,false);
+
+    wall1   = initObject(200,300,100,50,false);
+    wall2   = initObject(350,250,100,50,false);
     //the object type needs some variables that can be put here to stay more simple
     player.speedX = 200;
     //speedX it's in object type but will be removed soon
@@ -180,6 +208,8 @@ void Nsetup(void) {
     player.text  = loadBMPText("Assets/player.bmp",renderer);
     key1.text    = loadBMPText("Assets/key.bmp"   ,renderer);
     door1.text   = loadBMPText("Assets/door.bmp"  ,renderer);
+    wall1.text   = loadBMPText("Assets/plat.bmp"  ,renderer);
+    wall2.text   = loadBMPText("Assets/plat.bmp"  ,renderer);
     Background       = loadBMPText("Assets/room1.bmp" ,renderer);
 
     sqr1    = setAnimation(sqr1,3,renderer,(char*[]){"Assets/sqrbtn0.bmp","Assets/sqrbtn1.bmp","Assets/sqrbtn2.bmp"});
@@ -202,7 +232,6 @@ void update(void) {
         rockbottom = WINDOW_HEIGHT - player.height - 164;
         if(hasCollision(player,key1)){
             dooropen1 = true;
-            SDL_DestroyTexture(key1.text);
             key1.y = 999;
             SDL_DestroyTexture(door1.text);
             door1.text = loadBMPText("Assets/dooro.bmp"  ,renderer);
@@ -215,19 +244,20 @@ void update(void) {
         } else {
             player.onfloor = false;
         }
+
+        
     }
 
     if(Room == 2){
         rockbottom = WINDOW_HEIGHT - player.height - 164;
         if(hasCollision(player,key1)){
             dooropen1 = true;
-            SDL_DestroyTexture(key1.text);
             key1.y = 999;
             SDL_DestroyTexture(door1.text);
             door1.text = loadBMPText("Assets/dooro.bmp"  ,renderer);
         }
     
-        if (player.y > rockbottom || hasCollision(player,roof1)) {
+        if ((player.y > rockbottom && player.y < 280 && player.x < 120)|| (player.y > rockbottom && player.y < 280 && player.x > 450) || hasCollision(player,roof1)) {
             if (player.y > rockbottom)
             player.y = rockbottom;
             player.onfloor = true;
@@ -235,13 +265,13 @@ void update(void) {
             player.onfloor = false;
         }
 
-        if(dooropen1 && hasCollision(player,door1)){
-            SDL_DestroyTexture(door1.text);
-            SDL_DestroyTexture(key1.text);
-        }
+        player = backInCollision(player,wall1);
+        player = backInCollision(player,wall2);
     }
 
     player = backInCollision(player,roof1);
+    
+
     //checks if it's colliding and block it (on the more above code)
 
 
@@ -258,7 +288,11 @@ void update(void) {
 // Render function to draw game objects in the SDL window
 ///////////////////////////////////////////////////////////////////////////////
 void render(void) {
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    if (player.text == NULL)
+    {SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+     player.text = loadBMPText("Assets/player.bmp",renderer);}
+    else{SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);}
+    
     SDL_RenderClear(renderer);
 
     SDL_Rect RBack = {0,0, WINDOW_WIDTH, WINDOW_HEIGHT};
@@ -269,6 +303,20 @@ void render(void) {
         blitObject(roof1,renderer);
         blitObject(key1,renderer);
         blitObject(door1,renderer);
+
+        if(dooropen1 && hasCollision(player,door1)){
+            sqr1.text = sqr1.anim[0];
+            blitAnimateObject(sqr1,renderer,time1);
+            time1++;
+            if (time1 > 120)
+                time1 = 30;
+        }
+    }
+    if(Room == 2){
+        blitObject(key1,renderer);
+        blitObject(door1,renderer);
+        blitObject(wall1,renderer);
+        blitObject(wall2,renderer);
 
         if(dooropen1 && hasCollision(player,door1)){
             sqr1.text = sqr1.anim[0];
@@ -295,6 +343,7 @@ void destroy_window(void) {
     SDL_DestroyTexture(roof1.text);
     SDL_DestroyTexture(key1.text);
     SDL_DestroyTexture(door1.text);
+    SDL_DestroyTexture(wall1.text);
     SDL_DestroyTexture(Background);
 
     SDL_JoystickClose(joystick);
@@ -308,6 +357,8 @@ void destroy_window(void) {
 // Main function
 ///////////////////////////////////////////////////////////////////////////////
 int main(int argc, char* args[]) {
+    sleep(5);
+
     game_is_running = initialize_window();// init window and some other important things
 
     Nsetup();// set up some things (is Nsetup and not Setup because it's causing conflict with another function)
